@@ -71,7 +71,7 @@ public:
                                 PatternRewriter &rewriter) const final {
     Value levelDef = op.getOperand(0);
     Value levelPos = op.getOperand(1);
-    
+  
     Operation* lvlDefOp = levelDef.getDefiningOp<finch::DefineLevelOp>();
     if (!lvlDefOp) {
       return failure();
@@ -84,10 +84,12 @@ public:
       return failure();
     }
 
+    Operation* clonedLvlDefOp = rewriter.clone(*lvlDefOp);  
 
-    Block &defBlock = lvlDefOp->getRegion(0).front();
+    Block &defBlock = clonedLvlDefOp->getRegion(0).front();
     Operation* retLooplet = defBlock.getTerminator();
     Value looplet = retLooplet->getOperand(0);
+    
     rewriter.inlineBlockBefore(&defBlock, op, ValueRange(levelPos));
     rewriter.eraseOp(retLooplet);
     rewriter.replaceOp(op, looplet);
@@ -129,9 +131,35 @@ public:
   LogicalResult matchAndRewrite(scf::ForOp op,
                                 PatternRewriter &rewriter) const {
     size_t numMoved = moveLoopInvariantCode(op);
-    //op->walk(
-    //  [&](LoopLikeOpInterface loopLike) { moveLoopInvariantCode(loopLike); });
     return numMoved > 0 ? success() : failure();
+  }
+};
+
+
+class FinchAssignRewriter : public OpRewritePattern<finch::AssignOp> {
+public:
+  using OpRewritePattern<finch::AssignOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(finch::AssignOp op,
+                                PatternRewriter &rewriter) const {
+    Value out = op.getOperand(0); 
+    Value in = op.getOperand(1); 
+
+    Operation* defOp = out.getDefiningOp();
+    if (isa<finch::AccessOp>(defOp)) {
+      return failure();
+    }
+
+    assert(isa<memref::LoadOp>(defOp) && "Currently Assign can only convert memref.load after elementlevel");
+    assert(defOp->getNumOperands() == 2 && "Currently only accept non-scalar tensor");
+
+    auto sourceMemref = defOp->getOperand(0);
+    auto sourcePos = defOp->getOperand(1);
+
+    rewriter.replaceOpWithNewOp<memref::StoreOp>(
+        op, in, sourceMemref, sourcePos);
+
+    return success();
   }
 };
 
@@ -589,6 +617,7 @@ public:
     patterns.add<FinchMemrefStoreLoadRewriter>(&getContext());
     patterns.add<FinchSemiringRewriter>(&getContext());
     patterns.add<FinchLoopInvariantCodeMotion>(&getContext());
+    patterns.add<FinchAssignRewriter>(&getContext());
     FrozenRewritePatternSet patternSet(std::move(patterns));
     if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet))) {
       signalPassFailure();
@@ -604,8 +633,8 @@ public:
   void runOnOperation() final {
     RewritePatternSet patterns(&getContext());
     patterns.add<FinchLoopletRunRewriter>(&getContext());
-    patterns.add<FinchMemrefStoreLoadRewriter>(&getContext());
-    patterns.add<FinchSemiringRewriter>(&getContext());
+    //patterns.add<FinchMemrefStoreLoadRewriter>(&getContext());
+    //patterns.add<FinchSemiringRewriter>(&getContext());
     FrozenRewritePatternSet patternSet(std::move(patterns));
     if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
       signalPassFailure();

@@ -209,4 +209,20 @@ def Finch_GetLevelOp : Finch_Op<"getlevel", [Pure]> {
     }];
 }
 
+def Finch_AssignOp : Finch_Op<"assign", [AllTypesMatch<["in","out"]>]> {
+    let summary = "Finch getlevel op";
+    let description = [{
+        ```mlir
+        %2 = finch.assign 
+        ```
+    }];
+
+    let arguments = (ins AnyType:$out,AnyType:$in ); 
+
+    let assemblyFormat = [{ 
+        $out `=` $in attr-dict `:` type($in)
+    }];
+}
+
+
 #endif // FINCH_OPS
