@@ -209,7 +209,7 @@ def Finch_GetLevelOp : Finch_Op<"getlevel", [Pure]> {
     }];
 }
 
-def Finch_AssignOp : Finch_Op<"assign", [AllTypesMatch<["in","out"]>]> {
+def Finch_AssignOp : Finch_Op<"assign", [MemRefsNormalizable, AllTypesMatch<["in","out"]>]> {
     let summary = "Finch getlevel op";
     let description = [{
         ```mlir

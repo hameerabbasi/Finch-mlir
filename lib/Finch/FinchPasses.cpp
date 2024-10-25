@@ -144,20 +144,46 @@ public:
                                 PatternRewriter &rewriter) const {
     Value out = op.getOperand(0); 
     Value in = op.getOperand(1); 
-
-    Operation* defOp = out.getDefiningOp();
-    if (isa<finch::AccessOp>(defOp)) {
+ 
+    // finch.assign %out = %in
+    if (in == out) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+   
+    Operation* loadOp = out.getDefiningOp();
+    if (isa<finch::AccessOp>(loadOp)) {
+      // wait until looplet pass finishes lowering
       return failure();
     }
 
-    assert(isa<memref::LoadOp>(defOp) && "Currently Assign can only convert memref.load after elementlevel");
-    assert(defOp->getNumOperands() == 2 && "Currently only accept non-scalar tensor");
+    assert(isa<memref::LoadOp>(loadOp) && "Currently Assign can only convert memref.load after elementlevel");
+    assert(loadOp->getNumOperands() == 2 && "Currently only accept non-scalar tensor");
 
-    auto sourceMemref = defOp->getOperand(0);
-    auto sourcePos = defOp->getOperand(1);
+   // Value "in" is dependent to "out"
+   // e.g.,
+   // %in = arith.addf %out, %1
+   // finch.assign %out = %in
+    bool isReduction = false;
+    for (Operation *user : loadOp->getUsers()) {
+        if (in.getDefiningOp() == user) { 
+          isReduction = true;
+          break;
+        }
+    }
 
-    rewriter.replaceOpWithNewOp<memref::StoreOp>(
-        op, in, sourceMemref, sourcePos);
+    auto sourceMemref = loadOp->getOperand(0);
+    auto sourcePos = loadOp->getOperand(1);
+    auto storeOp = rewriter.replaceOpWithNewOp<memref::StoreOp>(
+                  op, in, sourceMemref, sourcePos);
+
+
+    // seriously consider replaceing this into finch.assign %out += %in
+    if (isReduction) {
+      rewriter.setInsertionPointToStart(storeOp->getBlock());
+      Operation* newLoadOp = rewriter.clone(*loadOp);
+      rewriter.replaceOpUsesWithinBlock(loadOp, newLoadOp->getResult(0), storeOp->getBlock());
+    }
 
     return success();
   }
