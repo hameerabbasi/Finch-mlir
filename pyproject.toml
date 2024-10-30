@@ -10,18 +10,13 @@ requires = [
 ]
 
 [tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-*"
 build-verbosity = 1
-test-requires = [
-    "pytest",
-    "pytest-cov",
-    "PyYAML",
-    "scipy",
-    "sparse@git+https://github.com/pydata/sparse@updated-llvm-nightly-test"
-]
+test-requires = ["pytest", "pytest-cov", "PyYAML", "scipy"]
+before-test = "pip install --no-deps sparse@git+https://github.com/pydata/sparse@updated-llvm-nightly-test"
 test-command = "SPARSE_BACKEND=MLIR pytest --pyargs sparse.mlir_backend"
 
 [tool.cibuildwheel.linux]
-build = "cp310-* cp311-* cp312-*"
 skip = ["*-manylinux_i686", "*-musllinux*"]
 environment = { PATH = "/usr/lib/ccache:/usr/lib64/ccache:/usr/lib/ccache/bin:$PATH" }
 before-build = [
@@ -31,7 +26,6 @@ before-build = [
 environment-pass = ["HOST_CCACHE_DIR"]
 
 [tool.cibuildwheel.macos]
-build = "cp310-* cp311-* cp312-*"
 environment = { PATH = "/usr/local/opt/ccache/libexec:$PATH" }
 before-build = [
     "pip install -r {project}/Finch-mlir/requirements/requirements.txt",
@@ -41,7 +35,6 @@ repair-wheel-command = [
 ]
 
 [tool.cibuildwheel.windows]
-build = "cp310-* cp311-* cp312-*"
 before-build = [
     "pip install delvewheel",
     "pip install -r {project}/Finch-mlir/requirements/requirements.txt",
