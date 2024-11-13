@@ -1,4 +1,5 @@
 import os
+import platform
 import shutil
 import sys
 import subprocess
@@ -33,6 +34,14 @@ class CMakeBuild(build_ext):
         extra_flags = []
         if sys.platform.startswith("darwin"):
             extra_flags.append("-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0")
+        elif platform.system() == "Windows":
+            extra_flags += [
+                "-DCMAKE_C_COMPILER=cl",
+                "-DCMAKE_CXX_COMPILER=cl",
+                "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                "-DCMAKE_C_FLAGS=/MT",
+                "-DCMAKE_CXX_FLAGS=/MT",
+            ]
 
         # BUILD LLVM
         llvm_cmake_args = [
@@ -64,12 +73,14 @@ class CMakeBuild(build_ext):
             check=True,
         )
 
+        llvm_lit = "llvm-lit.py" if platform.system() == "Windows" else "llvm-lit"
+
         # BUILD FINCH DIALECT
         dialect_cmake_args = [
             "-G Ninja",
             f"-B{finch_build_dir}",
-            f"-DMLIR_DIR={llvm_install_dir}/lib/cmake/mlir",
-            f"-DLLVM_EXTERNAL_LIT={llvm_build_dir}/bin/llvm-lit",
+            f"-DMLIR_DIR={llvm_install_dir / 'lib' / 'cmake' / 'mlir'}",
+            f"-DLLVM_EXTERNAL_LIT={llvm_build_dir / 'bin' / llvm_lit}",
             "-DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON",
             f"-DCMAKE_MAKE_PROGRAM:FILEPATH={ninja_executable_path}",
             "-DLLVM_ENABLE_ZLIB=OFF",
@@ -127,7 +138,7 @@ finch_build_dir = create_dir("finch-build")
 
 setup(
     name="finch-mlir",
-    version="0.0.1",
+    version="0.0.2",
     include_package_data=True,
     description="Finch MLIR distribution as wheel.",
     long_description="Finch MLIR distribution as wheel.",
