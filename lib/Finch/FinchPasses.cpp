@@ -238,58 +238,65 @@ public:
   using OpRewritePattern<scf::ForOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(scf::ForOp forOp,
                                 PatternRewriter &rewriter) const final {
-    auto indVar = forOp.getInductionVar();
+    auto loopIndex = forOp.getInductionVar();
     
     OpBuilder builder(forOp);
     Location loc = forOp.getLoc();
 
     for (auto& accessOp : *forOp.getBody()) {
-      if (isa<mlir::finch::AccessOp>(accessOp)) {
-        auto accessVar = accessOp.getOperand(1);
-        if (accessVar == indVar) {
-          auto runLooplet = accessOp.getOperand(0).getDefiningOp<finch::RunOp>();
-          if (!runLooplet) {
-            continue;
-          }
+      if (!isa<mlir::finch::AccessOp>(accessOp)) 
+        continue;
+      
+      Value accessIndex = accessOp.getOperand(1);
+      if (accessIndex != loopIndex) 
+        continue;
+      
+      auto runLooplet = dyn_cast<finch::RunOp>(
+          accessOp.getOperand(0).getDefiningOp());
+      if (!runLooplet) 
+        continue;
+        
+      Value runValue = runLooplet.getOperand(); 
+
+      // If run was not at the leaf node,
+      // we traverse all the down untill the leaf and
+      // replace leaf with the constant run value.
+      if (accessOp.getResultTypes()[0].isIndex()) {
+        WalkResult walkResult = 
+          forOp.walk<WalkOrder::PreOrder>([&](finch::AccessOp aOp) {
+            bool isLeafLevel = !(aOp->getResultTypes()[0].isIndex());
+            if (!isLeafLevel) {
+              return WalkResult::advance();
+            }
+           
+            // Is leaflevel aOp dependent to the accessOp?
+            // if so, replace the value with run value
+            Operation* op_ = aOp;
+            while (isa<finch::AccessOp>(op_) 
+                || isa<finch::GetLevelOp>(op_)) {
+              if (isa<finch::AccessOp>(op_)) {
+                Operation* lvl = op_->getOperand(0).getDefiningOp();
+                op_ = lvl;
+              } else if (isa<finch::GetLevelOp>(op_)) {
+                Operation* access = op_->getOperand(1).getDefiningOp();
+                op_ = access;
+                if (access == &accessOp) {
+                  rewriter.replaceOp(aOp, runValue);
+                  return WalkResult::interrupt();
+                }
+              } 
+            }
             
-          Value runValue = runLooplet.getOperand(); 
-
-          if (accessOp.getResultTypes()[0].isIndex()) {
-            WalkResult walkResult = forOp.walk<WalkOrder::PreOrder>([&](finch::AccessOp aOp) {
-                bool isFinalLevel = !(aOp->getResultTypes()[0].isIndex());
-                if (!isFinalLevel) {
-                  return WalkResult::advance();
-                }
-               
-                // is final level aOp dependent to the accessOp?
-                // if so, replace the value with run value
-                Operation* op_ = aOp;
-                while (isa<finch::AccessOp>(op_) || isa<finch::GetLevelOp>(op_)) {
-                  if (isa<finch::AccessOp>(op_)) {
-                    Operation* lvl = op_->getOperand(0).getDefiningOp();
-                    op_ = lvl;
-                  } else if (isa<finch::GetLevelOp>(op_)) {
-                    Operation* access = op_->getOperand(1).getDefiningOp();
-                    op_ = access;
-                    if (access == &accessOp) {
-                      rewriter.replaceOp(aOp, runValue);
-                      return WalkResult::interrupt();
-                    }
-                  } 
-                }
-                
-                return WalkResult::advance();
-              }
-            );
-          } else {
-            // Replace Access to Run Value
-            rewriter.replaceOp(&accessOp, runValue);
+            return WalkResult::advance();
           }
-
-
-          return success();
-        }
+        );
+      } else {
+        // Replace Access to Run Value
+        rewriter.replaceOp(&accessOp, runValue);
       }
+
+
+      return success();
     }
     
     return failure();
@@ -302,95 +309,99 @@ public:
 
   LogicalResult matchAndRewrite(scf::ForOp forOp,
                                 PatternRewriter &rewriter) const final {
-    auto indVar = forOp.getInductionVar();
+    auto loopIndex = forOp.getInductionVar();
     
     OpBuilder builder(forOp);
     Location loc = forOp.getLoc();
-
-    for (auto& accessOp : *forOp.getBody()) {
-      if (isa<mlir::finch::AccessOp>(accessOp)) {
-        auto accessVar = accessOp.getOperand(1);
-        if (accessVar == indVar) {
-          auto seqLooplet = accessOp.getOperand(0).getDefiningOp<finch::SequenceOp>();
-          if (!seqLooplet) {
-            //accessOp.emitWarning() << "No Sequence Looplet";
-            continue;
-          }
-          
-          rewriter.setInsertionPoint(forOp);
-          // Main Sequence Rewrite          
-          IRMapping mapper1;
-          IRMapping mapper2;
-          Operation* newForOp1 = rewriter.clone(*forOp, mapper1);
-          Operation* newForOp2 = rewriter.clone(*forOp, mapper2);
-          rewriter.moveOpAfter(newForOp1, forOp);
-          rewriter.moveOpAfter(newForOp2, newForOp1);
-
-          // Replace Access operand with Sequence bodies
-          auto newAccess1 = mapper1.lookupOrDefault(&accessOp);
-          auto newAccess2 = mapper2.lookupOrDefault(&accessOp);
-          auto bodyLooplet1 = seqLooplet.getOperand(1);
-          auto bodyLooplet2 = seqLooplet.getOperand(2);
-          auto newBodyLooplet1 = mapper1.lookupOrDefault(bodyLooplet1);
-          auto newBodyLooplet2 = mapper2.lookupOrDefault(bodyLooplet2);
-          newAccess1->setOperand(0, newBodyLooplet1);
-          newAccess2->setOperand(0, newBodyLooplet2);
-          
-          // Intersection
-          Value loopLb = forOp.getLowerBound();
-          Value loopUb = forOp.getUpperBound();
-
-          //       firstBodyUb=secondBodyLb
-          //                  v
-          // [---firstBody---)[---secondBody---)
-          Value firstBodyUb = seqLooplet.getOperand(0);
-          Value secondBodyLb = firstBodyUb;
-          if (!firstBodyUb.getType().isIndex()) {
-            firstBodyUb = rewriter.create<arith::IndexCastOp>(
-                loc, rewriter.getIndexType(), firstBodyUb);
-            secondBodyLb = rewriter.create<arith::IndexCastOp>(
-                loc, rewriter.getIndexType(), secondBodyLb);
-          }         
-          
-          // Main intersect
-          Value newFirstLoopUb = rewriter.create<arith::MinUIOp>(
-              loc, loopUb, firstBodyUb);
-          Value newSecondLoopLb = rewriter.create<arith::MaxUIOp>(
-              loc, loopLb, secondBodyLb);
-          cast<scf::ForOp>(newForOp1).setUpperBound(newFirstLoopUb);
-          cast<scf::ForOp>(newForOp2).setLowerBound(newSecondLoopLb);
-
-          //llvm::outs() << *(newForOp1->getBlock()->getParentOp()->getBlock()->getParentOp()) << "\n";
-
-          // Build a chain
-          // %0 = tensor.empty()
-          // %1 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %0) //forOp
-          // %2 = scf.for $i = $b0 to %b2 step %c1 iter_args(%v = %0) //newForOp1
-          // %3 = scf.for $i = $b2 to %b1 step %c1 iter_args(%v = %0) //newForOp2
-          // return %1
-          //
-          // vvv
-          //
-          // %0 = tensor.empty()
-          // %1 = scf.for $i = $b0 to %b2 step %c1 iter_args(%v = %0) //newForOp1  
-          // %2 = scf.for $i = $b2 to %b1 step %c1 iter_args(%v = %1) //newForOp2
-          // return %2
-
-          // First three are lowerbound, upperbound, and step
-          int numIterArgs = newForOp2->getNumOperands() - 3;
-          if (numIterArgs > 0) {
-            rewriter.replaceAllUsesWith(forOp->getResults(), newForOp2->getResults());
-            newForOp2->setOperands(3, numIterArgs, newForOp1->getResults());
-          }
-
-          rewriter.eraseOp(forOp);
-          
-          //llvm::outs() << "Done\n";
-          return success();
-        }
-      }
-    }
     
+    for (auto& accessOp : *forOp.getBody()) {
+      if (!isa<mlir::finch::AccessOp>(accessOp)) 
+        continue;
+      
+      Value accessIndex = accessOp.getOperand(1);
+      if (accessIndex != loopIndex) 
+        continue;
+      
+      auto seqLooplet = dyn_cast<finch::SequenceOp>(
+          accessOp.getOperand(0).getDefiningOp());
+      if (!seqLooplet) 
+        continue;
+         
+      rewriter.setInsertionPoint(forOp);
+      // Main Sequence Rewrite          
+      IRMapping mapper1;
+      IRMapping mapper2;
+      Operation* newForOp1 = rewriter.clone(*forOp, mapper1);
+      Operation* newForOp2 = rewriter.clone(*forOp, mapper2);
+      rewriter.moveOpAfter(newForOp1, forOp);
+      rewriter.moveOpAfter(newForOp2, newForOp1);
+
+      // Replace Access operand with Sequence bodies
+      auto newAccess1 = mapper1.lookupOrDefault(&accessOp);
+      auto newAccess2 = mapper2.lookupOrDefault(&accessOp);
+      auto bodyLooplet1 = seqLooplet.getOperand(1);
+      auto bodyLooplet2 = seqLooplet.getOperand(2);
+      auto newBodyLooplet1 = mapper1.lookupOrDefault(bodyLooplet1);
+      auto newBodyLooplet2 = mapper2.lookupOrDefault(bodyLooplet2);
+      newAccess1->setOperand(0, newBodyLooplet1);
+      newAccess2->setOperand(0, newBodyLooplet2);
+      
+      // Intersection
+      Value loopLb = forOp.getLowerBound();
+      Value loopUb = forOp.getUpperBound();
+
+      // Finch.jl used both closed endpoints,
+      // but Finch.mlir uses [st,en) for now.
+      // This is for aligning syntax with scf.for
+      // scf.for uses [st,en).
+      // TODO: We need to make finch.for
+      //
+      //       firstBodyUb=secondBodyLb
+      //                  v
+      // [---firstBody---)[---secondBody---)
+      Value firstBodyUb = seqLooplet.getOperand(0);
+      Value secondBodyLb = firstBodyUb;
+      if (!firstBodyUb.getType().isIndex()) {
+        firstBodyUb = rewriter.create<arith::IndexCastOp>(
+            loc, rewriter.getIndexType(), firstBodyUb);
+        secondBodyLb = rewriter.create<arith::IndexCastOp>(
+            loc, rewriter.getIndexType(), secondBodyLb);
+      }         
+      
+      // Main intersect
+      Value newFirstLoopUb = rewriter.create<arith::MinUIOp>(
+          loc, loopUb, firstBodyUb);
+      Value newSecondLoopLb = rewriter.create<arith::MaxUIOp>(
+          loc, loopLb, secondBodyLb);
+      cast<scf::ForOp>(newForOp1).setUpperBound(newFirstLoopUb);
+      cast<scf::ForOp>(newForOp2).setLowerBound(newSecondLoopLb);
+
+
+      // Build a chain on scf.for
+      // %0 = tensor.empty()
+      // %1 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %0) //forOp
+      // %2 = scf.for $i = $b0 to %b2 step %c1 iter_args(%v = %0) //newForOp1
+      // %3 = scf.for $i = $b2 to %b1 step %c1 iter_args(%v = %0) //newForOp2
+      // return %1
+      //
+      // vvv
+      //
+      // %0 = tensor.empty()
+      // %1 = scf.for $i = $b0 to %b2 step %c1 iter_args(%v = %0) //newForOp1  
+      // %2 = scf.for $i = $b2 to %b1 step %c1 iter_args(%v = %1) //newForOp2
+      // return %2
+
+      // First three are lowerbound, upperbound, and step
+      int numIterArgs = newForOp2->getNumOperands() - 3;
+      if (numIterArgs > 0) {
+        rewriter.replaceAllUsesWith(forOp->getResults(), newForOp2->getResults());
+        newForOp2->setOperands(3, numIterArgs, newForOp1->getResults());
+      }
+
+      rewriter.eraseOp(forOp);
+      
+      return success();
+    }
     return failure();
   }
 };
@@ -402,28 +413,42 @@ public:
 
   LogicalResult matchAndRewrite(scf::ForOp forOp,
                                 PatternRewriter &rewriter) const final {
+
+    auto loopIndex = forOp.getInductionVar();
+    
+    OpBuilder builder(forOp);
+    Location loc = forOp.getLoc();
     
     for (auto& accessOp : *forOp.getBody()) {
-      if (isa<mlir::finch::AccessOp>(accessOp)) {
-        auto accessVar = accessOp.getOperand(1);
-        if (accessVar == forOp.getInductionVar()) {
-          Operation* lookupLooplet = accessOp.getOperand(0).getDefiningOp();
-          if (!isa<finch::LookupOp>(lookupLooplet)) {
-            continue;
-          }
+      if (!isa<mlir::finch::AccessOp>(accessOp)) 
+        continue;
+      
+      Value accessIndex = accessOp.getOperand(1);
+      if (accessIndex != loopIndex) 
+        continue;
+      
+      auto lookupLooplet = dyn_cast<finch::LookupOp>(
+          accessOp.getOperand(0).getDefiningOp());
+      
+      if (!lookupLooplet) 
+        continue;
             
-          Operation* lookupLooplet_ = rewriter.clone(*lookupLooplet);  
-          
-          Block &bodyBlock = lookupLooplet_->getRegion(0).front();
-          Operation* bodyReturn = bodyBlock.getTerminator();
-          Value bodyLooplet = bodyReturn->getOperand(0);
-          rewriter.inlineBlockBefore(&bodyBlock, &accessOp, forOp.getInductionVar());
-          accessOp.setOperand(0, bodyLooplet);
-          rewriter.eraseOp(bodyReturn);
-          return success();
-        }
-      }
+      Operation* lookupLooplet_ = 
+        rewriter.clone(*lookupLooplet);  
+      Block &bodyBlock = 
+        lookupLooplet_->getRegion(0).front();
+      Operation* bodyReturn = bodyBlock.getTerminator();
+      rewriter.inlineBlockBefore(
+          &bodyBlock, 
+          &accessOp, 
+          forOp.getInductionVar());
+      Value bodyLooplet = bodyReturn->getOperand(0);
+      
+      accessOp.setOperand(0, bodyLooplet);
+      rewriter.eraseOp(bodyReturn);
+      return success();
     }
+
     return failure();
   }
 };
