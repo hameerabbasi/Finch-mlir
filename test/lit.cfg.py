@@ -54,9 +54,7 @@ llvm_config.with_environment("PATH", config.llvm_tools_dir, append_path=True)
 tool_dirs = [config.finch_tools_dir, config.llvm_tools_dir]
 tools = [
     "mlir-opt",
-    "finch-capi-test",
     "finch-opt",
-    "finch-translate",
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

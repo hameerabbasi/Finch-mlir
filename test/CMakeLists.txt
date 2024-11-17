@@ -11,10 +11,7 @@ configure_lit_site_cfg(
 
 set(FINCH_TEST_DEPENDS
         FileCheck count not
-        finch-capi-test
         finch-opt
-        finch-translate
-        FinchPlugin
         )
 if(MLIR_ENABLE_BINDINGS_PYTHON)
   list(APPEND FINCH_TEST_DEPENDS FinchPythonModules)
@@ -28,4 +25,3 @@ set_target_properties(check-finch PROPERTIES FOLDER "Tests")
 
 add_lit_testsuites(FINCH ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${FINCH_TEST_DEPENDS})
 
-add_subdirectory(CAPI)
