@@ -135,7 +135,6 @@ public:
   }
 };
 
-
 class FinchAssignRewriter : public OpRewritePattern<finch::AssignOp> {
 public:
   using OpRewritePattern<finch::AssignOp>::OpRewritePattern;
@@ -366,15 +365,15 @@ public:
           // Build a chain
           // %0 = tensor.empty()
           // %1 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %0) //forOp
-          // %2 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %0) //newForOp1
-          // %3 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %0) //newForOp2
+          // %2 = scf.for $i = $b0 to %b2 step %c1 iter_args(%v = %0) //newForOp1
+          // %3 = scf.for $i = $b2 to %b1 step %c1 iter_args(%v = %0) //newForOp2
           // return %1
           //
           // vvv
           //
           // %0 = tensor.empty()
-          // %1 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %0) //newForOp1  
-          // %2 = scf.for $i = $b0 to %b1 step %c1 iter_args(%v = %1) //newForOp2
+          // %1 = scf.for $i = $b0 to %b2 step %c1 iter_args(%v = %0) //newForOp1  
+          // %2 = scf.for $i = $b2 to %b1 step %c1 iter_args(%v = %1) //newForOp2
           // return %2
 
           // First three are lowerbound, upperbound, and step
@@ -524,18 +523,21 @@ public:
     for (unsigned i = 0; i < stepperLooplets.size(); i++) {
       auto stepperLooplet = stepperLooplets[i];
       Block &stopBlock = stepperLooplet.getRegion(1).front();
+      
+      // IDK but this order is important.
+      // getTerminator -> inlineBlockBefore -> getOperand -> eraseOp
       Operation* stopReturn = stopBlock.getTerminator();
-      Value stopCoord = stopReturn->getOperand(0);
       rewriter.inlineBlockBefore(&stopBlock, forOp, after->getArgument(i));
+      Value stopCoord = stopReturn->getOperand(0);
       rewriter.eraseOp(stopReturn);
-      if (!stopCoord.getType().isIndex()) {
-        stopCoord = rewriter.create<arith::IndexCastOp>(
-            loc, rewriter.getIndexType(), stopCoord);
-      }
+
+      //llvm::outs() << "(2-2)\n";
       intersectUpperBound = rewriter.create<arith::MinUIOp>(
           loc, intersectUpperBound, stopCoord);
       stopCoords.push_back(stopCoord);
     }
+    //llvm::outs() << *(forOp->getBlock()->getParentOp()->getBlock()->getParentOp()) << "\n";
+    //llvm::outs() << numIterArgs << "\n";
     forOp.setLowerBound(after->getArgument(numIterArgs-1));
     forOp.setUpperBound(intersectUpperBound); 
 
@@ -594,8 +596,6 @@ public:
     nextPositions.push_back(nextCoord);
     rewriter.setInsertionPointToEnd(after);
     rewriter.create<scf::YieldOp>(loc, ValueRange(nextPositions));
-    //llvm::outs() << "(5)\n";
-    //llvm::outs() << *(forOp->getBlock()->getParentOp()->getBlock()->getParentOp()) << "\n";
 
     // Todo:Build a chain
     // %0 = tensor.empty()
