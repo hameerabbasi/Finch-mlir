@@ -152,7 +152,6 @@ public:
    
     Operation* loadOp = out.getDefiningOp();
     if (isa<finch::AccessOp>(loadOp)) {
-      // wait until looplet pass finishes lowering
       return failure();
     }
 
@@ -549,7 +548,7 @@ public:
       auto stepperLooplet = stepperLooplets[i];
       Block &stopBlock = stepperLooplet.getRegion(1).front();
       
-      // IDK but this order is important.
+      // IDK why but this order is important.
       // getTerminator -> inlineBlockBefore -> getOperand -> eraseOp
       Operation* stopReturn = stopBlock.getTerminator();
       rewriter.inlineBlockBefore(&stopBlock, forOp, after->getArgument(i));
@@ -652,7 +651,7 @@ public:
     patterns.add<FinchInstantiateRewriter>(&getContext());
     patterns.add<FinchLoopInvariantCodeMotion>(&getContext());
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
+    if (failed(applyPatternsGreedily(getOperation(), patternSet)))
       signalPassFailure();
   }
 };
@@ -670,7 +669,7 @@ public:
     patterns.add<FinchLoopInvariantCodeMotion>(&getContext());
     patterns.add<FinchAssignRewriter>(&getContext());
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet))) {
+    if (failed(applyPatternsGreedily(getOperation(), patternSet))) {
       signalPassFailure();
     }
   }
@@ -687,7 +686,7 @@ public:
     //patterns.add<FinchMemrefStoreLoadRewriter>(&getContext());
     //patterns.add<FinchSemiringRewriter>(&getContext());
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
+    if (failed(applyPatternsGreedily(getOperation(), patternSet)))
       signalPassFailure();
   }
 };
@@ -701,7 +700,7 @@ public:
     RewritePatternSet patterns(&getContext());
     patterns.add<FinchLoopletSequenceRewriter>(&getContext()); 
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
+    if (failed(applyPatternsGreedily(getOperation(), patternSet)))
       signalPassFailure();
   }
 };
@@ -715,7 +714,7 @@ public:
     RewritePatternSet patterns(&getContext());
     patterns.add<FinchLoopletLookupRewriter>(&getContext()); 
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
+    if (failed(applyPatternsGreedily(getOperation(), patternSet)))
       signalPassFailure();
   }
 };
@@ -729,7 +728,7 @@ public:
     RewritePatternSet patterns(&getContext());
     patterns.add<FinchLoopletStepperRewriter>(&getContext()); 
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
+    if (failed(applyPatternsGreedily(getOperation(), patternSet)))
       signalPassFailure();
   }
 };
@@ -747,7 +746,7 @@ public:
     patterns.add<FinchLoopletStepperRewriter>(&getContext()); 
     patterns.add<FinchLoopletLookupRewriter>(&getContext()); 
     FrozenRewritePatternSet patternSet(std::move(patterns));
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), patternSet)))
+    if (failed(applyPatternsGreedily(getOperation(), patternSet)))
       signalPassFailure();
   }
 };
