@@ -38,10 +38,18 @@ cmake -G Ninja ../llvm \
    -DPython3_EXECUTABLE=<YOUR PYTHON PATH (e.g., /Users/jaeyeonwon/.venv/mlirdev/bin/python)>
 
 # Build and Check mlir (I got 88% passed)
-cmake --build . --target check-mlir 
+cmake --build . --target check-mlir
+
 ```
 
-3. Build Finch-mlir
+3. Add PYTHONPATH
+```
+# Add below line to .bashrc or .zshrc
+export PYTHONPATH=$LLVM_BUILD_DIR/tools/mlir/python_packages/mlir_core:$PYTHONPATH
+```
+
+
+4. Build Finch-mlir
 
 ```
 https://github.com/finch-tensor/Finch-mlir.git
@@ -53,4 +61,3 @@ cmake -G Ninja .. -DMLIR_DIR=$LLVM_BUILD_DIR/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=
 # Build and Check finch-mlir
 cmake --build . --target check-finch
 ```
-
