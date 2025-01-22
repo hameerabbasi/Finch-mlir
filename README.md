@@ -4,9 +4,10 @@ This is an example of an out-of-tree [MLIR](https://mlir.llvm.org/) dialect alon
 
 ## How to Install
 
-0. Git clone llvm repository
+0. Git clone llvm repository (at commit point bb59eb8ed534da2bd03117cfde594321add4d60c)
 ```
 git clone https://github.com/llvm/llvm-project.git
+git checkout bb59eb8ed534da2bd03117cfde594321add4d60c
 cd llvm-project
 ```
 
