@@ -169,6 +169,7 @@ setup(
         llvm_source_dir=f"./llvm-project/llvm",
         finch_source_dir="./Finch-mlir",
     )],
+    install_requires=["PyYAML>=6", "numpy>=1.17"],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
 )
