@@ -22,7 +22,6 @@ jobs:
       matrix:
         os: ['ubuntu-24.04', 'macos-13', 'macos-14', 'windows-2022']
         arch: ['x86_64', 'aarch64']
-        python: ['3.10']
         exclude:
           - os: 'ubuntu-24.04'  # TODO: needs qemu setup
             arch: 'aarch64'
@@ -64,7 +63,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: ${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.python }}
+          key: ${{ matrix.os }}-${{ matrix.arch }}
           max-size: "1G"
           verbose: 2
           variant: ccache
@@ -122,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: wheelhouse/*.whl
-          name: artifact_finch_mlir-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.python }}
+          name: artifact_finch_mlir-${{ matrix.os }}-${{ matrix.arch }}
 
   release-wheel:
     runs-on: 'ubuntu-latest'
