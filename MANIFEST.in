@@ -1,0 +1,2 @@
+recursive-include llvm-project **/*
+recursive-exclude llvm-project/.git **/*

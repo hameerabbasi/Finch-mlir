@@ -9,7 +9,24 @@ requires = [
     "PyYAML",
     "nanobind",
     "delvewheel; platform_system=='Windows'",
+    "setuptools-scm>=8",
 ]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finch-mlir"
+dynamic = ["version"]
+description = "Finch MLIR distribution as wheel."
+readme = "README.md"
+dependencies = [
+    "PyYAML>=6",
+    "numpy>=1.17",
+]
+
+[tool.setuptools.packages.find]
+include = ["mlir_finch", "mlir_finch.*"]
+
+[tool.setuptools_scm]
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-*"
@@ -22,7 +39,7 @@ test-command = "python -m pytest --pyargs sparse.mlir_backend"
 skip = ["*-manylinux_i686", "*-musllinux*"]
 environment = { PATH = "/usr/lib/ccache:/usr/lib64/ccache:/usr/lib/ccache/bin:$PATH" }
 before-build = [
-    "{project}/Finch-mlir/scripts/docker_prepare_ccache.sh"
+    "{project}/scripts/docker_prepare_ccache.sh"
 ]
 environment-pass = ["HOST_CCACHE_DIR", "SPARSE_BACKEND"]
 

@@ -11,7 +11,6 @@ find_package(Python3 COMPONENTS Interpreter Development.Module NumPy REQUIRED)
 # nanobind uses Python_EXECUTABLE
 find_package(Python COMPONENTS Interpreter Development.Module NumPy REQUIRED)
 
-
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   find_package(MLIR REQUIRED CONFIG)
 

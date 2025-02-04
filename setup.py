@@ -10,7 +10,6 @@ import ninja
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
-
 class CMakeExtension(Extension):
     def __init__(
         self,
@@ -19,7 +18,7 @@ class CMakeExtension(Extension):
         finch_source_dir: str,
     ) -> None:
         super().__init__(name, sources=[])
-        self.llvm_source_dir = os.fspath(Path(llvm_source_dir).resolve())
+        self.llvm_source_dir = os.fspath((Path(llvm_source_dir)  / "llvm").resolve())
         self.finch_source_dir = os.fspath(Path(finch_source_dir).resolve())
 
 
@@ -98,6 +97,7 @@ class CMakeBuild(build_ext):
             f"-B{finch_build_dir}",
             f"-DMLIR_DIR={llvm_install_dir / 'lib' / 'cmake' / 'mlir'}",
             f"-DLLVM_EXTERNAL_LIT={llvm_build_dir / 'bin' / llvm_lit}",
+            f"-DLLVM_MAIN_SRC_DIR={ext.llvm_source_dir}"
             "-DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON",
             f"-DCMAKE_MAKE_PROGRAM:FILEPATH={ninja_executable_path}",
             "-DLLVM_ENABLE_ZLIB=OFF",
@@ -158,18 +158,11 @@ finch_build_dir = create_dir("finch-build")
 
 
 setup(
-    name="finch-mlir",
-    version="0.0.2",
-    include_package_data=True,
-    description="Finch MLIR distribution as wheel.",
-    long_description="Finch MLIR distribution as wheel.",
-    long_description_content_type="text/markdown",
     ext_modules=[CMakeExtension(
         "mlir_finch_ext",
-        llvm_source_dir=f"./llvm-project/llvm",
-        finch_source_dir="./Finch-mlir",
+        llvm_source_dir="./llvm-project",
+        finch_source_dir=".",
     )],
-    install_requires=["PyYAML>=6", "numpy>=1.17"],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
 )

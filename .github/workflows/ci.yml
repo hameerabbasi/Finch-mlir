@@ -37,14 +37,7 @@ jobs:
       - name: Checkout Finch-mlir
         uses: actions/checkout@v4
         with:
-          path: 'Finch-mlir'
-
-      - name: Checkout LLVM
-        uses: actions/checkout@v4
-        with:
-          repository: llvm/llvm-project
-          ref: 'bb59eb8ed534da2bd03117cfde594321add4d60c'  # Latest commit as of 2025-01-22
-          path: 'llvm-project'
+          submodules: 'recursive'
 
       - name: Setup Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1.4.1
@@ -105,8 +98,6 @@ jobs:
         env:
           SPARSE_BACKEND: MLIR
         run: |
-          mv ./Finch-mlir/setup.py .
-          mv ./Finch-mlir/pyproject.toml .
           cibuildwheel --output-dir ./wheelhouse
           ccache -s
 
