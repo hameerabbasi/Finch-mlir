@@ -2,3 +2,13 @@
 build/
 *.egg-info
 dist/
+finch_mlir-*/
+
+# pixi environments
+.pixi
+*.egg-info
+
+# Log files
+*.log
+
+/wheelhouse/

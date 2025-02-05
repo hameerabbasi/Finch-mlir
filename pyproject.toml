@@ -1,17 +1,17 @@
 [build-system]
 requires = [
-    "setuptools>=42",
     "wheel",
     "ninja",
-    "cmake>=3.12",
+    "cmake>=3.20",
     "pybind11>=2.10.4",
     "numpy>=2",
     "PyYAML",
     "nanobind",
     "delvewheel; platform_system=='Windows'",
     "setuptools-scm>=8",
+    "scikit-build-core>=0.10,<0.11"
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "finch-mlir"
@@ -23,10 +23,45 @@ dependencies = [
     "numpy>=1.17",
 ]
 
-[tool.setuptools.packages.find]
-include = ["mlir_finch", "mlir_finch.*"]
-
 [tool.setuptools_scm]
+
+[tool.scikit-build]
+cmake.source-dir = "llvm-project/llvm"
+ninja.make-fallback = false
+cmake.args = ["-UNB_SUFFIX", "-UNB_SUFFIX_S"]
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+wheel.exclude = ["**/*", "!python_packages/finch/**/*"]
+
+[tool.scikit-build.wheel.packages]
+mlir_finch = "python_packages/finch/mlir_finch"
+
+[tool.scikit-build.cmake.define]
+LLVM_EXTERNAL_PROJECTS = "finch"
+LLVM_EXTERNAL_FINCH_SOURCE_DIR= "."
+MLIR_ENABLE_BINDINGS_PYTHON = true
+LLVM_ENABLE_PROJECTS = "mlir"
+LLVM_TARGETS_TO_BUILD = "Native"
+LLVM_INSTALL_UTILS = true
+LLVM_CCACHE_BUILD = true
+LLVM_ENABLE_ZLIB = false
+LLVM_ENABLE_ZSTD = false
+CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
+CMAKE_C_COMPILER_LAUNCHER= "ccache"
+CMAKE_CXX_COMPILER_LAUNCHER= "ccache"
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^darwin"
+inherit.cmake.define = "append"
+cmake.define.CMAKE_OSX_DEPLOYMENT_TARGET = "11.0"
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^win32"
+inherit.cmake.define = "append"
+cmake.define.CMAKE_C_COMPILER = "cl"
+cmake.define.CMAKE_CXX_COMPILER = "cl"
+cmake.define.CMAKE_MSVC_RUNTIME_LIBRARY= "MultiThreaded"
+cmake.define.CMAKE_C_FLAGS = "/MT"
+cmake.define.CMAKE_CXX_FLAGS = "/MT"
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-*"
