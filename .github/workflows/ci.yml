@@ -4,6 +4,9 @@ on:
   schedule:
     # At 09:00 on Monday. (see https://crontab.guru)
     - cron: '0 9 * * 1'
+  pull_request:
+    branches:
+      - main
 
 defaults:
   run:
@@ -92,6 +95,8 @@ jobs:
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" | tee -a $GITHUB_ENV
 
       - name: cibuildwheel run
+        env:
+          SPARSE_BACKEND: "MLIR"
         run: |
           cibuildwheel --output-dir ./wheelhouse
           ccache -s
@@ -111,6 +116,7 @@ jobs:
 
   release-wheel:
     runs-on: 'ubuntu-latest'
+    if: github.ref_name == 'main'
     needs: build-wheel
     permissions:
       id-token: write

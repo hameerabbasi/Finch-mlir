@@ -61,19 +61,25 @@ cmake.define.CMAKE_CXX_FLAGS = "/MT"
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-*"
-build-frontend = { name = "build[uv]", args = ["--no-isolation"] }
+build-frontend = { name = "build", args = ["--no-isolation"] }
 build-verbosity = 1
 test-requires = ["pytest", "pytest-cov", "PyYAML", "scipy"]
 before-build = [
-    "pip install pip-tools && pip-compile --all-build-deps -o \"{project}/build-reqs.txt\" && pip install -r \"{project}/build-reqs.txt\""
+    # These two lines get the build requirements from `pyproject.toml`
+    "pip install pip-tools",
+    "pip-compile --all-build-deps -o \"{project}/build-reqs.txt\" \"{project}/pyproject.toml\"",
+    # We install them since we're building without isolation.
+    "pip install -r \"{project}/build-reqs.txt\"",
+    # We remove the residual *.so files specific to a CPython version from the last build.
+    "find \"{project}\" -name *.cpython-*.so -type f -delete"
 ]
-before-test = "uv pip install --no-deps sparse@git+https://github.com/pydata/sparse.git"
-test-command = "SPARSE_BACKEND=\"MLIR\" python -m pytest --pyargs sparse.mlir_backend"
+before-test = "pip install --no-deps sparse@git+https://github.com/pydata/sparse.git"
+test-command = "python -m pytest --pyargs sparse.mlir_backend"
 
 [tool.cibuildwheel.linux]
 skip = ["*-manylinux_i686", "*-musllinux*"]
 environment = { PATH = "/usr/lib/ccache:/usr/lib64/ccache:/usr/lib/ccache/bin:$PATH" }
-environment-pass = ["HOST_CCACHE_DIR"]
+environment-pass = ["HOST_CCACHE_DIR", "SPARSE_BACKEND"]
 before-all = [
     "\"{project}/scripts/docker_prepare_ccache.sh\""
 ]
